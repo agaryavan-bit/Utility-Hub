@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { X } from 'lucide-react';
 import { FloatingGlassDock } from './components/layout/FloatingGlassDock';
+import { ReminderAlarmController } from './components/layout/ReminderAlarmController';
 import { TopGlassBar } from './components/layout/TopGlassBar';
 import { CrossToolModals } from './components/modals/CrossToolModals';
 import { AnkiDroidModule } from './components/modules/AnkiDroidModule';
@@ -105,21 +106,25 @@ const HubViewport: React.FC = () => {
       <div className="relative z-10 flex-1 flex flex-col">
         <TopGlassBar />
 
-        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 pt-3 pb-28 sm:pb-32">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={viewKey}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            >
-              {renderView()}
-            </motion.div>
-          </AnimatePresence>
-        </main>
+        <div className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 pt-3 pb-10 sm:pb-12 flex items-start gap-3 sm:gap-5">
+          <FloatingGlassDock />
 
-        <FloatingGlassDock />
+          <main className="flex-1 min-w-0">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={viewKey}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              >
+                {renderView()}
+              </motion.div>
+            </AnimatePresence>
+          </main>
+        </div>
+
+        <ReminderAlarmController />
         <CrossToolModals />
         <ToastStack />
       </div>

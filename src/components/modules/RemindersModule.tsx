@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
+  BellRing,
   Calendar,
   Check,
   CheckCircle2,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useHub } from '../../context/HubContext';
 import { ReminderPriority, ReminderRepeat } from '../../types/hub';
+import { appAudioEngine } from '../../utils/appAudioEngine';
 import { autoScrollToElement } from '../../utils/autoScroll';
 import { triggerHaptic } from '../../utils/haptics';
 
@@ -294,18 +296,18 @@ export const RemindersModule: React.FC = () => {
         {/* New Reminder Form */}
         {smartFilter !== 'completed' && (
           <form onSubmit={handleAdd} className="rounded-2xl bg-white/70 border border-white p-4 space-y-3">
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Add a reminder…"
-                className="flex-1 h-11 px-4 rounded-xl glass-input text-sm font-medium"
+                className="flex-1 min-w-0 h-11 px-4 rounded-xl glass-input text-sm font-medium"
               />
               <button
                 type="submit"
                 disabled={!title.trim()}
-                className="h-11 px-5 rounded-xl bg-[#007AFF] hover:bg-[#0062CC] text-white text-xs font-semibold disabled:opacity-40 active:scale-95 transition-all whitespace-nowrap"
+                className="h-11 px-5 rounded-xl bg-[#007AFF] hover:bg-[#0062CC] text-white text-xs font-semibold disabled:opacity-40 active:scale-95 transition-all whitespace-nowrap shrink-0"
               >
                 Add Task
               </button>
@@ -330,8 +332,22 @@ export const RemindersModule: React.FC = () => {
                 type="time"
                 value={dueTime}
                 onChange={(e) => setDueTime(e.target.value)}
+                aria-label="Task start time"
+                title="Task start time — plays an alarm sound when reached"
                 className="h-9 px-2.5 rounded-xl glass-input font-mono text-xs"
               />
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('selection');
+                  appAudioEngine.previewAlarmChime();
+                }}
+                title="Preview task start alarm sound"
+                className="h-9 px-2.5 rounded-xl bg-white/75 hover:bg-white border border-white text-slate-600 hover:text-[#007AFF] text-xs font-medium flex items-center gap-1 transition-colors active:scale-95"
+              >
+                <BellRing className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Test Sound</span>
+              </button>
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as ReminderPriority)}

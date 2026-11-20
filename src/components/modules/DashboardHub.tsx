@@ -13,6 +13,7 @@ import {
   Landmark,
   Languages,
   Layers,
+  Mail,
   NotebookPen,
   Palette,
   Pin,
@@ -52,6 +53,17 @@ export const DashboardHub: React.FC = () => {
   } = useHub();
 
   const [catFilter, setCatFilter] = useState<'all' | 'favorites'>('all');
+  const activeTempMailAddress = (() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem('tooly_temp_mail_session_v1');
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { address?: string };
+      return parsed?.address || null;
+    } catch {
+      return null;
+    }
+  })();
 
   const activeCity =
     state.weatherCities.find((c) => c.id === state.activeWeatherCityId) ?? state.weatherCities[0];
@@ -73,7 +85,7 @@ export const DashboardHub: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Unified Live Glance Strip */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* Live Weather Glance */}
         <button
           type="button"
@@ -101,6 +113,26 @@ export const DashboardHub: React.FC = () => {
               isDay={weather?.current.isDay ?? true}
               className="w-8 h-8"
             />
+          </div>
+        </button>
+
+        {/* Temp Mail Glance */}
+        <button
+          type="button"
+          onClick={() => setActiveModule('tempmail')}
+          className="glass-panel glass-interactive rounded-3xl p-5 text-left flex items-center justify-between gap-4"
+        >
+          <div className="min-w-0 space-y-1">
+            <div className="text-xs font-medium text-slate-500">Temp Mail · Disposable</div>
+            <div className="font-display text-2xl font-bold text-slate-950 truncate">
+              {activeTempMailAddress ? 'Active' : '1-Tap Inbox'}
+            </div>
+            <div className="text-xs text-slate-600 truncate">
+              {activeTempMailAddress ?? 'Generate & copy free Mail.tm address'}
+            </div>
+          </div>
+          <div className="w-14 h-14 rounded-2xl bg-emerald-500/12 border border-white flex items-center justify-center shrink-0 text-emerald-600">
+            <Mail className="w-7 h-7" />
           </div>
         </button>
 
@@ -149,7 +181,7 @@ export const DashboardHub: React.FC = () => {
 
       {/* Pinned Utilities Strip */}
       <section className="glass-panel rounded-3xl p-5 sm:p-6 space-y-4">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-lg font-bold text-slate-900">Pinned Utilities</h2>
             <p className="text-xs text-slate-500">
@@ -164,6 +196,14 @@ export const DashboardHub: React.FC = () => {
             >
               <Languages className="w-3.5 h-3.5" />
               <span>Interpreter</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveModule('tempmail')}
+              className="h-9 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs shadow-emerald-600/20 active:scale-95"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span>Temp Mail</span>
             </button>
             <button
               type="button"

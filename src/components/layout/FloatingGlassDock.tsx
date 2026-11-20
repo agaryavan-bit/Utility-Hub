@@ -8,6 +8,7 @@ import {
   Languages,
   Layers,
   LayoutGrid,
+  Mail,
   NotebookPen,
   QrCode,
 } from 'lucide-react';
@@ -18,18 +19,20 @@ import { triggerHaptic } from '../../utils/haptics';
 interface VerticalTabItem {
   id: ActiveModule;
   label: string;
+  shortLabel: string;
   icon: React.ComponentType<{ className?: string }>;
   accent: string;
 }
 
 const VERTICAL_TABS: VerticalTabItem[] = [
-  { id: 'hub', label: 'Tooly', icon: LayoutGrid, accent: '#007AFF' },
-  { id: 'interpreter', label: 'Voice', icon: Languages, accent: '#0284C7' },
-  { id: 'qr', label: 'QR Studio', icon: QrCode, accent: '#0EA5E9' },
-  { id: 'weather', label: 'Weather', icon: CloudSun, accent: '#F59E0B' },
-  { id: 'notes', label: 'Notes', icon: NotebookPen, accent: '#EAB308' },
-  { id: 'reminders', label: 'Tasks', icon: CheckCircle2, accent: '#EF4444' },
-  { id: 'anki', label: 'AnkiDroid', icon: Layers, accent: '#6366F1' },
+  { id: 'hub', label: 'Tooly', shortLabel: 'Tooly', icon: LayoutGrid, accent: '#007AFF' },
+  { id: 'interpreter', label: 'Voice', shortLabel: 'Voice', icon: Languages, accent: '#0284C7' },
+  { id: 'tempmail', label: 'Temp Mail', shortLabel: 'Temp Mail', icon: Mail, accent: '#10B981' },
+  { id: 'qr', label: 'QR Studio', shortLabel: 'QR', icon: QrCode, accent: '#0EA5E9' },
+  { id: 'weather', label: 'Weather', shortLabel: 'Weather', icon: CloudSun, accent: '#F59E0B' },
+  { id: 'notes', label: 'Notes', shortLabel: 'Notes', icon: NotebookPen, accent: '#EAB308' },
+  { id: 'reminders', label: 'Tasks', shortLabel: 'Tasks', icon: CheckCircle2, accent: '#EF4444' },
+  { id: 'anki', label: 'AnkiDroid', shortLabel: 'Anki', icon: Layers, accent: '#6366F1' },
 ];
 
 const SLIDER_STORAGE_KEY = 'tooly_vertical_tabs_slider_open_v1';
@@ -102,7 +105,7 @@ export const FloatingGlassDock: React.FC = () => {
     >
       <div
         className={`relative glass-dock rounded-[24px] p-1.5 flex flex-col gap-1 transition-[width] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          expanded ? 'w-[172px] sm:w-[194px]' : 'w-[58px] sm:w-[64px]'
+          expanded ? 'w-[178px] sm:w-[198px]' : 'w-[68px] sm:w-[76px]'
         }`}
       >
         {/* Top Vertical-Tabs Slider Toggle Control */}
@@ -150,8 +153,10 @@ export const FloatingGlassDock: React.FC = () => {
                 aria-current={isActive ? 'page' : undefined}
                 aria-label={item.label}
                 title={!expanded ? item.label : undefined}
-                className={`relative w-full min-h-[44px] rounded-[16px] flex items-center transition-colors active:scale-[0.97] overflow-hidden ${
-                  expanded ? 'px-2.5 gap-2.5 justify-start' : 'justify-center px-0'
+                className={`relative w-full rounded-[16px] flex items-center transition-colors active:scale-[0.97] overflow-hidden ${
+                  expanded
+                    ? 'min-h-[42px] px-2.5 gap-2.5 justify-start flex-row'
+                    : 'min-h-[50px] py-1.5 px-1 gap-0.5 justify-center flex-col'
                 } ${
                   isActive
                     ? 'text-[#007AFF]'
@@ -178,18 +183,18 @@ export const FloatingGlassDock: React.FC = () => {
 
                 <span className="relative z-10 flex items-center justify-center shrink-0">
                   <Icon
-                    className={`w-[19px] h-[19px] transition-transform duration-150 ${
+                    className={`w-[18px] h-[18px] transition-transform duration-150 ${
                       isActive ? 'scale-105 stroke-[2.25]' : 'stroke-[1.9]'
                     }`}
                   />
                   {!expanded && badgeCount > 0 && (
-                    <span className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] px-1 rounded-full bg-slate-900 text-white font-mono text-[9.5px] font-semibold flex items-center justify-center tabular-nums leading-none">
+                    <span className="absolute -top-1.5 -right-2.5 min-w-[15px] h-[15px] px-1 rounded-full bg-slate-900 text-white font-mono text-[9.5px] font-semibold flex items-center justify-center tabular-nums leading-none">
                       {badgeCount > 99 ? '99+' : badgeCount}
                     </span>
                   )}
                 </span>
 
-                {expanded && (
+                {expanded ? (
                   <>
                     <span
                       className={`relative z-10 text-[13px] truncate flex-1 text-left whitespace-nowrap ${
@@ -204,6 +209,14 @@ export const FloatingGlassDock: React.FC = () => {
                       </span>
                     )}
                   </>
+                ) : (
+                  <span
+                    className={`relative z-10 text-[10px] leading-[1.15] tracking-tight text-center max-w-full truncate px-0.5 ${
+                      isActive ? 'font-bold text-[#007AFF]' : 'font-semibold text-slate-600'
+                    }`}
+                  >
+                    {item.shortLabel}
+                  </span>
                 )}
               </button>
             );

@@ -7,6 +7,7 @@ import { triggerHaptic } from '../../utils/haptics';
 const MODULE_TITLES: Record<string, string> = {
   hub: 'Tooly',
   interpreter: 'Interpreter',
+  tempmail: 'Temp Mail',
   qr: 'QR Studio',
   weather: 'Weather',
   notes: 'Notes',

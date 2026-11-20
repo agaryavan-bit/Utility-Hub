@@ -7,6 +7,7 @@ import {
   Download,
   Languages,
   Layers,
+  Mail,
   NotebookPen,
   Plus,
   QrCode,
@@ -76,7 +77,13 @@ const GlobalSearchModal: React.FC = () => {
         (kw) => kw.includes(q) || q.includes(kw)
       );
 
-    return { tools, notes, reminders, decks, matchesInterpreter };
+    const matchesTempMail =
+      Boolean(q) &&
+      ['temp mail', 'tempmail', 'mail', 'email', 'disposable', 'inbox', 'otp', 'verification', 'mail.tm'].some(
+        (kw) => kw.includes(q) || q.includes(kw)
+      );
+
+    return { tools, notes, reminders, decks, matchesInterpreter, matchesTempMail };
   }, [query, state.pinnedToolIds, state.notes, state.reminders, state.ankiDecks]);
 
   return (
@@ -123,9 +130,10 @@ const GlobalSearchModal: React.FC = () => {
               {!query.trim() && (
                 <div>
                   <div className="px-2.5 pb-1.5 text-[11px] font-semibold text-slate-500">Integrated Apps</div>
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                  <div className="grid grid-cols-3 sm:grid-cols-7 gap-1.5">
                     {([
                       { id: 'interpreter', label: 'Voice', icon: Languages },
+                      { id: 'tempmail', label: 'Temp Mail', icon: Mail },
                       { id: 'qr', label: 'QR', icon: QrCode },
                       { id: 'weather', label: 'Weather', icon: CloudSun },
                       { id: 'notes', label: 'Notes', icon: NotebookPen },
@@ -144,11 +152,35 @@ const GlobalSearchModal: React.FC = () => {
                           className="p-2.5 rounded-xl bg-white/75 hover:bg-white flex flex-col items-center gap-1 text-xs font-semibold text-slate-800"
                         >
                           <Icon className="w-4 h-4 text-[#007AFF]" />
-                          <span>{app.label}</span>
+                          <span className="truncate max-w-full">{app.label}</span>
                         </button>
                       );
                     })}
                   </div>
+                </div>
+              )}
+
+              {results.matchesTempMail && (
+                <div>
+                  <div className="px-2.5 pb-1.5 text-[11px] font-semibold text-slate-500">Temp Mail</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveModule('tempmail');
+                      setSearchOpen(false);
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl hover:bg-white/85 flex items-center justify-between gap-3 text-left transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Mail className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-slate-900">Temp Mail Disposable Inbox</div>
+                        <div className="text-xs text-slate-500 truncate">
+                          1-tap free Mail.tm address, auto-refreshing inbox & OTP reader
+                        </div>
+                      </div>
+                    </div>
+                  </button>
                 </div>
               )}
 
@@ -281,6 +313,7 @@ const GlobalSearchModal: React.FC = () => {
 
               {query.trim() &&
                 !results.matchesInterpreter &&
+                !results.matchesTempMail &&
                 results.tools.length === 0 &&
                 results.notes.length === 0 &&
                 results.reminders.length === 0 &&

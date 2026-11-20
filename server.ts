@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import crypto from 'crypto';
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -297,6 +298,244 @@ async function startServer() {
     } catch (err) {
       const { status, message } = extractApiError(err);
       res.status(status).json({ error: message });
+    }
+  });
+
+  // ==================== TEMP MAIL (Mail.tm Public API — Free, No API Key) ====================
+  const MAIL_TM_BASE = 'https://api.mail.tm';
+
+  const extractMailTmList = <T,>(payload: unknown): T[] => {
+    if (Array.isArray(payload)) return payload as T[];
+    if (payload && typeof payload === 'object' && Array.isArray((payload as Record<string, unknown>)['hydra:member'])) {
+      return (payload as Record<string, unknown>)['hydra:member'] as T[];
+    }
+    return [];
+  };
+
+  app.post('/api/tempmail/create', async (req, res) => {
+    try {
+      const { prefix } = (req.body || {}) as { prefix?: string };
+
+      const domainsRes = await fetch(`${MAIL_TM_BASE}/domains`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!domainsRes.ok) {
+        res.status(502).json({ error: 'Unable to fetch active Temp Mail domains right now.' });
+        return;
+      }
+      const domainsRaw = await domainsRes.json();
+      const domains = extractMailTmList<{ domain?: string; isActive?: boolean; isPrivate?: boolean }>(
+        domainsRaw
+      ).filter((d) => d.domain && d.isActive !== false && !d.isPrivate);
+
+      const chosenDomain = domains[0]?.domain;
+      if (!chosenDomain) {
+        res.status(502).json({ error: 'No active disposable email domain available right now.' });
+        return;
+      }
+
+      const cleanPrefix = (prefix || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]/g, '')
+        .replace(/^[._-]+|[._-]+$/g, '')
+        .slice(0, 20);
+
+      const makeLocalPart = (forceRandomSuffix: boolean) => {
+        const randTag = crypto.randomBytes(3).toString('hex');
+        if (cleanPrefix && !forceRandomSuffix) return `${cleanPrefix}.${randTag.slice(0, 4)}`;
+        const words = ['swift', 'clear', 'glass', 'nova', 'breeze', 'pulse', 'mint', 'sky', 'echo', 'halo'];
+        const word = words[crypto.randomInt(words.length)];
+        return `${cleanPrefix || word}.${randTag}`;
+      };
+
+      const password = `Tm!${crypto.randomBytes(12).toString('hex')}`;
+      let address = `${makeLocalPart(false)}@${chosenDomain}`;
+
+      let accountRes = await fetch(`${MAIL_TM_BASE}/accounts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ address, password }),
+      });
+
+      // Retry once with extra random suffix if address already exists
+      if (accountRes.status === 422) {
+        address = `${makeLocalPart(true)}@${chosenDomain}`;
+        accountRes = await fetch(`${MAIL_TM_BASE}/accounts`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({ address, password }),
+        });
+      }
+
+      if (!accountRes.ok) {
+        const errText = await accountRes.text();
+        res.status(accountRes.status === 429 ? 429 : 502).json({
+          error:
+            accountRes.status === 429
+              ? 'Temp Mail rate limit reached. Please wait a few seconds and try again.'
+              : `Could not create disposable inbox (${accountRes.status}): ${errText.slice(0, 120)}`,
+        });
+        return;
+      }
+
+      const account = (await accountRes.json()) as { id?: string; address?: string; createdAt?: string };
+
+      const tokenRes = await fetch(`${MAIL_TM_BASE}/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ address: account.address || address, password }),
+      });
+
+      if (!tokenRes.ok) {
+        res.status(502).json({ error: 'Inbox created, but session token login failed. Please retry.' });
+        return;
+      }
+
+      const tokenData = (await tokenRes.json()) as { token?: string; id?: string };
+      if (!tokenData.token) {
+        res.status(502).json({ error: 'Mail.tm returned an empty auth token.' });
+        return;
+      }
+
+      res.json({
+        id: account.id || tokenData.id || crypto.randomUUID(),
+        address: account.address || address,
+        token: tokenData.token,
+        createdAt: account.createdAt || new Date().toISOString(),
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Failed to create temporary email address.',
+      });
+    }
+  });
+
+  app.get('/api/tempmail/messages', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'Missing Temp Mail session token.' });
+        return;
+      }
+
+      const mailRes = await fetch(`${MAIL_TM_BASE}/messages`, {
+        headers: {
+          Authorization: authHeader,
+          Accept: 'application/json',
+        },
+      });
+
+      if (mailRes.status === 401) {
+        res.status(401).json({ error: 'This temporary inbox expired. Generate a fresh address.' });
+        return;
+      }
+      if (!mailRes.ok) {
+        res.status(mailRes.status === 429 ? 429 : 502).json({
+          error:
+            mailRes.status === 429
+              ? 'Refreshing too quickly. Pausing briefly before next sync.'
+              : 'Unable to fetch inbox messages right now.',
+        });
+        return;
+      }
+
+      const raw = await mailRes.json();
+      const messages = extractMailTmList<Record<string, unknown>>(raw);
+      res.json({ messages });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Failed to refresh Temp Mail inbox.',
+      });
+    }
+  });
+
+  app.get('/api/tempmail/messages/:id', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'Missing Temp Mail session token.' });
+        return;
+      }
+      const msgId = encodeURIComponent(req.params.id);
+
+      const mailRes = await fetch(`${MAIL_TM_BASE}/messages/${msgId}`, {
+        headers: {
+          Authorization: authHeader,
+          Accept: 'application/json',
+        },
+      });
+
+      if (!mailRes.ok) {
+        res.status(mailRes.status).json({ error: 'Could not load message contents.' });
+        return;
+      }
+
+      const detail = (await mailRes.json()) as Record<string, unknown>;
+
+      // Best-effort mark message as seen in background
+      if (detail.seen === false) {
+        fetch(`${MAIL_TM_BASE}/messages/${msgId}`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: authHeader,
+            'Content-Type': 'application/merge-patch+json',
+          },
+          body: JSON.stringify({ seen: true }),
+        }).catch(() => {});
+      }
+
+      res.json(detail);
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Failed to open email message.',
+      });
+    }
+  });
+
+  app.delete('/api/tempmail/messages/:id', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'Missing Temp Mail session token.' });
+        return;
+      }
+      const msgId = encodeURIComponent(req.params.id);
+      const delRes = await fetch(`${MAIL_TM_BASE}/messages/${msgId}`, {
+        method: 'DELETE',
+        headers: { Authorization: authHeader },
+      });
+      res.status(delRes.ok || delRes.status === 404 ? 200 : delRes.status).json({ ok: true });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Failed to delete message.',
+      });
+    }
+  });
+
+  app.delete('/api/tempmail/account/:id', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'Missing Temp Mail session token.' });
+        return;
+      }
+      const accId = encodeURIComponent(req.params.id);
+      await fetch(`${MAIL_TM_BASE}/accounts/${accId}`, {
+        method: 'DELETE',
+        headers: { Authorization: authHeader },
+      }).catch(() => {});
+      res.json({ ok: true });
+    } catch {
+      res.json({ ok: true });
     }
   });
 

@@ -1,4 +1,4 @@
-export type ActiveModule = 'hub' | 'interpreter' | 'qr' | 'weather' | 'notes' | 'reminders' | 'anki';
+export type ActiveModule = 'hub' | 'interpreter' | 'tempmail' | 'qr' | 'weather' | 'notes' | 'reminders' | 'anki';
 
 export type ToolyCategoryId =
   | 'general'

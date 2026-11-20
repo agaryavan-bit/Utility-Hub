@@ -11,6 +11,7 @@ import { InterpreterModule } from './components/modules/InterpreterModule';
 import { NotesModule } from './components/modules/NotesModule';
 import { QrStudioModule } from './components/modules/QrStudioModule';
 import { RemindersModule } from './components/modules/RemindersModule';
+import { TempMailModule } from './components/modules/TempMailModule';
 import { WeatherModule } from './components/modules/WeatherModule';
 import { ToolyWorkspace } from './components/tooly/ToolyWorkspace';
 import { HubProvider, useHub } from './context/HubContext';
@@ -90,6 +91,7 @@ const HubViewport: React.FC = () => {
       );
     }
     if (activeModule === 'interpreter') return <InterpreterModule />;
+    if (activeModule === 'tempmail') return <TempMailModule />;
     if (activeModule === 'qr') return <QrStudioModule />;
     if (activeModule === 'weather') return <WeatherModule />;
     if (activeModule === 'notes') return <NotesModule />;

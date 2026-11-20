@@ -1,4 +1,4 @@
-export type ActiveModule = 'hub' | 'qr' | 'weather' | 'notes' | 'reminders' | 'anki';
+export type ActiveModule = 'hub' | 'interpreter' | 'qr' | 'weather' | 'notes' | 'reminders' | 'anki';
 
 export type ToolyCategoryId =
   | 'general'
@@ -121,6 +121,19 @@ export interface QrHistoryItem {
   timestamp: number;
 }
 
+export interface InterpreterHistoryItem {
+  id: string;
+  sourceLangCode: string;
+  sourceLangName: string;
+  targetLangCode: string;
+  targetLangName: string;
+  sourceText: string;
+  translatedText: string;
+  transliteration: string;
+  inputMode: 'voice' | 'text';
+  timestamp: number;
+}
+
 export interface WeatherCity {
   id: string;
   name: string;
@@ -210,6 +223,7 @@ export interface PersistedHubState {
   ankiCards: AnkiCard[];
   ankiStats: AnkiStats;
   qrHistory: QrHistoryItem[];
+  interpreterHistory: InterpreterHistoryItem[];
   weatherCities: WeatherCity[];
   activeWeatherCityId: string;
   weatherCache: Record<string, WeatherForecastCache>;

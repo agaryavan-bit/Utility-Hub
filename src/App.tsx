@@ -6,6 +6,7 @@ import { TopGlassBar } from './components/layout/TopGlassBar';
 import { CrossToolModals } from './components/modals/CrossToolModals';
 import { AnkiDroidModule } from './components/modules/AnkiDroidModule';
 import { DashboardHub } from './components/modules/DashboardHub';
+import { InterpreterModule } from './components/modules/InterpreterModule';
 import { NotesModule } from './components/modules/NotesModule';
 import { QrStudioModule } from './components/modules/QrStudioModule';
 import { RemindersModule } from './components/modules/RemindersModule';
@@ -87,6 +88,7 @@ const HubViewport: React.FC = () => {
         <DashboardHub />
       );
     }
+    if (activeModule === 'interpreter') return <InterpreterModule />;
     if (activeModule === 'qr') return <QrStudioModule />;
     if (activeModule === 'weather') return <WeatherModule />;
     if (activeModule === 'notes') return <NotesModule />;

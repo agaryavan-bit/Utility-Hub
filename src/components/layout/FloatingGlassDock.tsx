@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import {
   CheckCircle2,
   CloudSun,
+  Languages,
   Layers,
   LayoutGrid,
   NotebookPen,
@@ -20,6 +21,7 @@ interface DockItem {
 
 const DOCK_ITEMS: DockItem[] = [
   { id: 'hub', label: 'Tooly', icon: LayoutGrid, accent: '#007AFF' },
+  { id: 'interpreter', label: 'Voice', icon: Languages, accent: '#0284C7' },
   { id: 'qr', label: 'QR', icon: QrCode, accent: '#0EA5E9' },
   { id: 'weather', label: 'Weather', icon: CloudSun, accent: '#F59E0B' },
   { id: 'notes', label: 'Notes', icon: NotebookPen, accent: '#EAB308' },
@@ -36,9 +38,9 @@ export const FloatingGlassDock: React.FC = () => {
   return (
     <nav
       aria-label="Primary application dock"
-      className="fixed bottom-3 sm:bottom-5 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-1.5rem)] max-w-xl"
+      className="fixed bottom-3 sm:bottom-5 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-1rem)] max-w-2xl"
     >
-      <div className="glass-dock rounded-[26px] p-1.5 grid grid-cols-6 items-center gap-0.5 sm:gap-1">
+      <div className="glass-dock rounded-[26px] p-1.5 grid grid-cols-7 items-center gap-0.5 sm:gap-1">
         {DOCK_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = activeModule === item.id;

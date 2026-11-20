@@ -5,6 +5,7 @@ import {
   AnkiCard,
   AnkiDeck,
   HubPreferences,
+  InterpreterHistoryItem,
   NoteItem,
   NoteTint,
   NoteToAnkiDraft,
@@ -62,6 +63,7 @@ function createInitialState(): PersistedHubState {
       totalReviews: 0,
     },
     qrHistory: [],
+    interpreterHistory: [],
     weatherCities: [],
     activeWeatherCityId: '',
     weatherCache: {},
@@ -163,6 +165,11 @@ interface HubContextValue {
   // QR History
   addQrHistory: (item: Omit<QrHistoryItem, 'id' | 'timestamp'>) => void;
   clearQrHistory: () => void;
+
+  // Interpreter History
+  addInterpreterHistory: (item: Omit<InterpreterHistoryItem, 'id' | 'timestamp'>) => InterpreterHistoryItem;
+  deleteInterpreterHistory: (id: string) => void;
+  clearInterpreterHistory: () => void;
 
   // Weather
   weatherLoading: boolean;
@@ -678,6 +685,36 @@ export const HubProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({ ...prev, qrHistory: [] }));
   }, []);
 
+  // Interpreter History
+  const addInterpreterHistory = useCallback(
+    (item: Omit<InterpreterHistoryItem, 'id' | 'timestamp'>): InterpreterHistoryItem => {
+      const created: InterpreterHistoryItem = {
+        ...item,
+        id: makeId('tr'),
+        timestamp: Date.now(),
+      };
+      setState((prev) => ({
+        ...prev,
+        interpreterHistory: [created, ...prev.interpreterHistory].slice(0, 50),
+      }));
+      return created;
+    },
+    []
+  );
+
+  const deleteInterpreterHistory = useCallback((id: string) => {
+    triggerHaptic('warning');
+    setState((prev) => ({
+      ...prev,
+      interpreterHistory: prev.interpreterHistory.filter((h) => h.id !== id),
+    }));
+  }, []);
+
+  const clearInterpreterHistory = useCallback(() => {
+    triggerHaptic('warning');
+    setState((prev) => ({ ...prev, interpreterHistory: [] }));
+  }, []);
+
   // Weather live Open-Meteo Sync
   const refreshWeatherForCity = useCallback(
     async (city: WeatherCity, force = false) => {
@@ -915,6 +952,9 @@ export const HubProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reviewAnkiCard,
       addQrHistory,
       clearQrHistory,
+      addInterpreterHistory,
+      deleteInterpreterHistory,
+      clearInterpreterHistory,
       weatherLoading,
       weatherError,
       setActiveWeatherCityId,
@@ -969,6 +1009,9 @@ export const HubProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reviewAnkiCard,
       addQrHistory,
       clearQrHistory,
+      addInterpreterHistory,
+      deleteInterpreterHistory,
+      clearInterpreterHistory,
       weatherLoading,
       weatherError,
       setActiveWeatherCityId,

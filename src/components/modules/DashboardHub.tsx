@@ -11,6 +11,7 @@ import {
   HeartPulse,
   Image as ImageIcon,
   Landmark,
+  Languages,
   Layers,
   NotebookPen,
   Palette,
@@ -155,7 +156,15 @@ export const DashboardHub: React.FC = () => {
               One-tap launch for your daily Tooly sub-tools and connected apps
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveModule('interpreter')}
+              className="h-9 px-3.5 rounded-xl bg-[#007AFF] hover:bg-[#0062CC] text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs shadow-[#007AFF]/20 active:scale-95"
+            >
+              <Languages className="w-3.5 h-3.5" />
+              <span>Interpreter</span>
+            </button>
             <button
               type="button"
               onClick={() => setActiveModule('qr')}

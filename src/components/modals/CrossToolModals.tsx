@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   CloudSun,
   Download,
+  Languages,
   Layers,
   NotebookPen,
   Plus,
@@ -69,7 +70,13 @@ const GlobalSearchModal: React.FC = () => {
           .slice(0, 4)
       : [];
 
-    return { tools, notes, reminders, decks };
+    const matchesInterpreter =
+      Boolean(q) &&
+      ['interpreter', 'translate', 'translator', 'voice', 'mic', 'microphone', 'speech', 'hindi', 'chinese', 'marathi', 'tulu', 'telugu', 'language'].some(
+        (kw) => kw.includes(q) || q.includes(kw)
+      );
+
+    return { tools, notes, reminders, decks, matchesInterpreter };
   }, [query, state.pinnedToolIds, state.notes, state.reminders, state.ankiDecks]);
 
   return (
@@ -116,8 +123,9 @@ const GlobalSearchModal: React.FC = () => {
               {!query.trim() && (
                 <div>
                   <div className="px-2.5 pb-1.5 text-[11px] font-semibold text-slate-500">Integrated Apps</div>
-                  <div className="grid grid-cols-5 gap-1.5">
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                     {([
+                      { id: 'interpreter', label: 'Voice', icon: Languages },
                       { id: 'qr', label: 'QR', icon: QrCode },
                       { id: 'weather', label: 'Weather', icon: CloudSun },
                       { id: 'notes', label: 'Notes', icon: NotebookPen },
@@ -141,6 +149,30 @@ const GlobalSearchModal: React.FC = () => {
                       );
                     })}
                   </div>
+                </div>
+              )}
+
+              {results.matchesInterpreter && (
+                <div>
+                  <div className="px-2.5 pb-1.5 text-[11px] font-semibold text-slate-500">Voice Interpreter</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveModule('interpreter');
+                      setSearchOpen(false);
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl hover:bg-white/85 flex items-center justify-between gap-3 text-left transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Languages className="w-4 h-4 text-[#007AFF] shrink-0" />
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-slate-900">50-Language Voice Interpreter</div>
+                        <div className="text-xs text-slate-500 truncate">
+                          Speak into mic to translate English, Chinese, Hindi, Marathi, Tulu, Telugu & more
+                        </div>
+                      </div>
+                    </div>
+                  </button>
                 </div>
               )}
 
@@ -248,6 +280,7 @@ const GlobalSearchModal: React.FC = () => {
               )}
 
               {query.trim() &&
+                !results.matchesInterpreter &&
                 results.tools.length === 0 &&
                 results.notes.length === 0 &&
                 results.reminders.length === 0 &&

@@ -105,7 +105,7 @@ export const FloatingGlassDock: React.FC = () => {
     >
       <div
         className={`relative glass-dock rounded-[24px] p-1.5 flex flex-col gap-1 transition-[width] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          expanded ? 'w-[178px] sm:w-[198px]' : 'w-[68px] sm:w-[76px]'
+          expanded ? 'w-[178px] sm:w-[198px]' : 'w-[70px] sm:w-[76px]'
         }`}
       >
         {/* Top Vertical-Tabs Slider Toggle Control */}
@@ -156,7 +156,7 @@ export const FloatingGlassDock: React.FC = () => {
                 className={`relative w-full rounded-[16px] flex items-center transition-colors active:scale-[0.97] overflow-hidden ${
                   expanded
                     ? 'min-h-[42px] px-2.5 gap-2.5 justify-start flex-row'
-                    : 'min-h-[50px] py-1.5 px-1 gap-0.5 justify-center flex-col'
+                    : 'min-h-[50px] py-1.5 px-1.5 gap-0.5 justify-center flex-col'
                 } ${
                   isActive
                     ? 'text-[#007AFF]'
@@ -177,7 +177,7 @@ export const FloatingGlassDock: React.FC = () => {
                   <motion.span
                     layoutId="liquid-vertical-slider-bar"
                     transition={{ type: 'spring', stiffness: 480, damping: 34 }}
-                    className="absolute left-1 top-2.5 bottom-2.5 w-[3px] rounded-full bg-[#007AFF] z-10"
+                    className="absolute left-0.5 top-2.5 bottom-2.5 w-[2.5px] rounded-full bg-[#007AFF] z-10"
                   />
                 )}
 
@@ -211,7 +211,7 @@ export const FloatingGlassDock: React.FC = () => {
                   </>
                 ) : (
                   <span
-                    className={`relative z-10 text-[10px] leading-[1.15] tracking-tight text-center max-w-full truncate px-0.5 ${
+                    className={`relative z-10 text-[9.5px] leading-[1.15] tracking-tight text-center max-w-full truncate pl-0.5 ${
                       isActive ? 'font-bold text-[#007AFF]' : 'font-semibold text-slate-600'
                     }`}
                   >

@@ -19,10 +19,14 @@ import { useHub } from '../../context/HubContext';
 import { autoScrollToElement } from '../../utils/autoScroll';
 import { triggerHaptic } from '../../utils/haptics';
 
+type TempMailProvider = 'mailtm' | 'maildrop' | 'guerrilla';
+
 interface TempMailAccount {
   id: string;
   address: string;
   token: string;
+  provider: TempMailProvider;
+  mailbox?: string;
   createdAt: string;
 }
 
@@ -48,6 +52,78 @@ interface TempMailDetail extends TempMailSummary {
 }
 
 const TEMP_MAIL_SESSION_KEY = 'tooly_temp_mail_session_v1';
+const MAILDROP_ENDPOINT = 'https://api.maildrop.cc/graphql';
+const GUERRILLA_ENDPOINT = 'https://api.guerrillamail.com/ajax.php';
+
+async function safeParseJson<T>(res: Response): Promise<T | null> {
+  try {
+    const text = await res.text();
+    if (!text || !text.trim()) return null;
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
+function generateLocalHandle(customPrefix?: string): string {
+  const cleanPrefix = (customPrefix || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, '')
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 18);
+
+  const bytes = new Uint8Array(3);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  const randHex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+
+  if (cleanPrefix) return `${cleanPrefix}.${randHex.slice(0, 4)}`;
+
+  const words = ['swift', 'clear', 'glass', 'nova', 'breeze', 'pulse', 'mint', 'sky', 'echo', 'halo'];
+  const word = words[bytes[0] % words.length];
+  return `${word}.${randHex}`;
+}
+
+function parseHeaderFrom(raw?: string): TempMailAddress {
+  if (!raw) return { address: 'Unknown sender' };
+  const match = raw.match(/^(.*?)\s*<([^>]+)>$/);
+  if (match) {
+    const name = match[1].replace(/^["']|["']$/g, '').trim();
+    return { name: name || undefined, address: match[2].trim() };
+  }
+  return { address: raw.trim() };
+}
+
+function extractReadableTextFromMime(rawData?: string, html?: string): string {
+  if (rawData) {
+    const splitIdx = rawData.indexOf('\r\n\r\n');
+    const lfSplitIdx = rawData.indexOf('\n\n');
+    const bodyStart = splitIdx !== -1 ? splitIdx + 4 : lfSplitIdx !== -1 ? lfSplitIdx + 2 : 0;
+    const candidate = rawData.slice(bodyStart).trim();
+    if (candidate && !candidate.includes('Content-Type: multipart/')) {
+      return candidate;
+    }
+  }
+  if (html) {
+    return html
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/\s+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+  return rawData || '';
+}
 
 function loadSavedSession(): TempMailAccount | null {
   if (typeof window === 'undefined') return null;
@@ -56,10 +132,19 @@ function loadSavedSession(): TempMailAccount | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<TempMailAccount>;
     if (parsed && parsed.id && parsed.address && parsed.token) {
+      const inferredProvider: TempMailProvider =
+        parsed.provider ||
+        (parsed.address.endsWith('@maildrop.cc')
+          ? 'maildrop'
+          : parsed.address.includes('guerrilla') || parsed.address.includes('sharklasers')
+          ? 'guerrilla'
+          : 'mailtm');
       return {
         id: parsed.id,
         address: parsed.address,
         token: parsed.token,
+        provider: inferredProvider,
+        mailbox: parsed.mailbox || parsed.address.split('@')[0],
         createdAt: parsed.createdAt || new Date().toISOString(),
       };
     }
@@ -85,7 +170,7 @@ function saveSession(account: TempMailAccount | null): void {
 function formatMailTime(iso?: string): string {
   if (!iso) return '';
   const dt = new Date(iso);
-  if (Number.isNaN(dt.getTime())) return '';
+  if (Number.isNaN(dt.getTime())) return iso;
   const diffSec = Math.max(0, Math.floor((Date.now() - dt.getTime()) / 1000));
   if (diffSec < 45) return 'Just now';
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
@@ -99,7 +184,6 @@ function extractVerificationCodes(subject: string, bodyText: string): string[] {
   const combined = `${subject}\n${bodyText}`;
   const found = new Set<string>();
 
-  // Priority 1: Codes explicitly preceded by verification/OTP/PIN keywords
   const keywordRegex =
     /(?:code|otp|pin|passcode|verification|confirm|token)[^A-Za-z0-9]{0,16}([0-9]{4,8}|[0-9]{3}-[0-9]{3})/gi;
   let m: RegExpExecArray | null;
@@ -107,7 +191,6 @@ function extractVerificationCodes(subject: string, bodyText: string): string[] {
     found.add(m[1]);
   }
 
-  // Priority 2: Standalone 4–6 digit numbers (skipping common years like 2024-2029)
   if (found.size === 0) {
     const bareRegex = /\b([0-9]{4,6})\b/g;
     while ((m = bareRegex.exec(combined)) !== null) {
@@ -163,6 +246,288 @@ function buildSandboxedEmailDoc(htmlFragments: string[]): string {
 </html>`;
 }
 
+// ==================== Provider Helpers (Backend Mail.tm + Direct Browser CORS Fallbacks) ====================
+
+async function createMailTmViaBackend(prefix?: string): Promise<TempMailAccount> {
+  const res = await fetch('/api/tempmail/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prefix: prefix || undefined }),
+  });
+  const data = await safeParseJson<Partial<TempMailAccount> & { error?: string }>(res);
+  if (!res.ok || !data || !data.id || !data.address || !data.token) {
+    throw new Error(data?.error || `Backend unavailable (${res.status})`);
+  }
+  return {
+    id: data.id,
+    address: data.address,
+    token: data.token,
+    provider: 'mailtm',
+    createdAt: data.createdAt || new Date().toISOString(),
+  };
+}
+
+async function createMaildropDirect(prefix?: string): Promise<TempMailAccount> {
+  const mailbox = generateLocalHandle(prefix).replace(/\./g, '').slice(0, 22);
+  const res = await fetch(MAILDROP_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: 'query($mailbox: String!) { inbox(mailbox: $mailbox) { id } }',
+      variables: { mailbox },
+    }),
+  });
+  const data = await safeParseJson<{ data?: { inbox?: unknown[] }; errors?: { message: string }[] }>(
+    res
+  );
+  if (!res.ok || !data?.data || data.errors?.length) {
+    throw new Error('Maildrop direct connection failed');
+  }
+  return {
+    id: `md_${mailbox}`,
+    address: `${mailbox}@maildrop.cc`,
+    token: mailbox,
+    mailbox,
+    provider: 'maildrop',
+    createdAt: new Date().toISOString(),
+  };
+}
+
+async function createGuerrillaDirect(prefix?: string): Promise<TempMailAccount> {
+  const res = await fetch(`${GUERRILLA_ENDPOINT}?f=get_email_address&lang=en`);
+  const data = await safeParseJson<{ email_addr?: string; sid_token?: string }>(res);
+  if (!res.ok || !data?.email_addr || !data?.sid_token) {
+    throw new Error('Guerrilla Mail direct connection failed');
+  }
+
+  let finalAddress = data.email_addr;
+  let sidToken = data.sid_token;
+
+  if (prefix) {
+    const cleanUser = generateLocalHandle(prefix).replace(/[^a-z0-9]/g, '').slice(0, 20);
+    if (cleanUser) {
+      const setRes = await fetch(
+        `${GUERRILLA_ENDPOINT}?f=set_email_user&email_user=${encodeURIComponent(
+          cleanUser
+        )}&lang=en&sid_token=${encodeURIComponent(sidToken)}`
+      );
+      const setData = await safeParseJson<{ email_addr?: string; sid_token?: string }>(setRes);
+      if (setRes.ok && setData?.email_addr) {
+        finalAddress = setData.email_addr;
+        sidToken = setData.sid_token || sidToken;
+      }
+    }
+  }
+
+  return {
+    id: `gm_${sidToken.slice(0, 12)}`,
+    address: finalAddress,
+    token: sidToken,
+    mailbox: finalAddress.split('@')[0],
+    provider: 'guerrilla',
+    createdAt: new Date().toISOString(),
+  };
+}
+
+async function listMessagesForAccount(
+  targetAccount: TempMailAccount
+): Promise<{ messages: TempMailSummary[]; expired?: boolean }> {
+  if (targetAccount.provider === 'maildrop') {
+    const mailbox = targetAccount.mailbox || targetAccount.address.split('@')[0];
+    const res = await fetch(MAILDROP_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query:
+          'query($mailbox: String!) { inbox(mailbox: $mailbox) { id headerfrom subject date } }',
+        variables: { mailbox },
+      }),
+    });
+    const data = await safeParseJson<{
+      data?: {
+        inbox?: Array<{ id: string; headerfrom?: string; subject?: string; date?: string }>;
+      };
+    }>(res);
+    if (!res.ok || !data?.data?.inbox) {
+      throw new Error('Unable to sync Maildrop inbox right now.');
+    }
+    const messages: TempMailSummary[] = data.data.inbox.map((item) => ({
+      id: item.id,
+      from: parseHeaderFrom(item.headerfrom),
+      subject: item.subject || '(No subject)',
+      createdAt: item.date,
+      seen: false,
+    }));
+    return { messages };
+  }
+
+  if (targetAccount.provider === 'guerrilla') {
+    const res = await fetch(
+      `${GUERRILLA_ENDPOINT}?f=get_email_list&offset=0&sid_token=${encodeURIComponent(
+        targetAccount.token
+      )}`
+    );
+    const data = await safeParseJson<{
+      list?: Array<{
+        mail_id: string | number;
+        mail_from?: string;
+        mail_subject?: string;
+        mail_excerpt?: string;
+        mail_read?: number | string;
+        mail_timestamp?: number | string;
+        mail_date?: string;
+      }>;
+    }>(res);
+    if (!res.ok || !data) {
+      throw new Error('Unable to sync inbox right now.');
+    }
+    const list = (data.list || [])
+      // Filter out Guerrilla's built-in welcome stub so inbox starts cleanly empty
+      .filter((item) => String(item.mail_id) !== '1')
+      .map((item) => {
+        const tsNum = Number(item.mail_timestamp);
+        const iso =
+          Number.isFinite(tsNum) && tsNum > 100000
+            ? new Date(tsNum * 1000).toISOString()
+            : item.mail_date;
+        return {
+          id: String(item.mail_id),
+          from: { address: item.mail_from || 'Unknown sender' },
+          subject: item.mail_subject || '(No subject)',
+          intro: item.mail_excerpt || '',
+          seen: Number(item.mail_read) === 1,
+          createdAt: iso,
+        };
+      });
+    return { messages: list };
+  }
+
+  // Default: Mail.tm via Express backend
+  const res = await fetch('/api/tempmail/messages', {
+    headers: { Authorization: `Bearer ${targetAccount.token}` },
+  });
+  if (res.status === 401) {
+    return { messages: [], expired: true };
+  }
+  const data = await safeParseJson<{ messages?: TempMailSummary[]; error?: string }>(res);
+  if (!res.ok || !data) {
+    throw new Error(data?.error || 'Unable to sync inbox right now.');
+  }
+  return { messages: data.messages || [] };
+}
+
+async function fetchMessageDetailForAccount(
+  targetAccount: TempMailAccount,
+  msgId: string
+): Promise<TempMailDetail> {
+  if (targetAccount.provider === 'maildrop') {
+    const mailbox = targetAccount.mailbox || targetAccount.address.split('@')[0];
+    const res = await fetch(MAILDROP_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query:
+          'query($mailbox: String!, $id: String!) { message(mailbox: $mailbox, id: $id) { id headerfrom subject date data html } }',
+        variables: { mailbox, id: msgId },
+      }),
+    });
+    const parsed = await safeParseJson<{
+      data?: {
+        message?: {
+          id: string;
+          headerfrom?: string;
+          subject?: string;
+          date?: string;
+          data?: string;
+          html?: string;
+        };
+      };
+    }>(res);
+    const m = parsed?.data?.message;
+    if (!res.ok || !m) {
+      throw new Error('Could not load message contents.');
+    }
+    return {
+      id: m.id,
+      from: parseHeaderFrom(m.headerfrom),
+      subject: m.subject || '(No subject)',
+      createdAt: m.date,
+      html: m.html ? [m.html] : [],
+      text: extractReadableTextFromMime(m.data, m.html),
+      seen: true,
+    };
+  }
+
+  if (targetAccount.provider === 'guerrilla') {
+    const res = await fetch(
+      `${GUERRILLA_ENDPOINT}?f=fetch_email&email_id=${encodeURIComponent(
+        msgId
+      )}&sid_token=${encodeURIComponent(targetAccount.token)}`
+    );
+    const m = await safeParseJson<{
+      mail_id?: string | number;
+      mail_from?: string;
+      mail_subject?: string;
+      mail_body?: string;
+      mail_timestamp?: number | string;
+    }>(res);
+    if (!res.ok || !m) {
+      throw new Error('Could not load message contents.');
+    }
+    const body = m.mail_body || '';
+    const looksHtml = /<[a-z][\s\S]*>/i.test(body);
+    const tsNum = Number(m.mail_timestamp);
+    return {
+      id: String(m.mail_id || msgId),
+      from: { address: m.mail_from || 'Unknown sender' },
+      subject: m.mail_subject || '(No subject)',
+      createdAt:
+        Number.isFinite(tsNum) && tsNum > 100000 ? new Date(tsNum * 1000).toISOString() : undefined,
+      html: looksHtml ? [body] : [],
+      text: looksHtml ? extractReadableTextFromMime(undefined, body) : body,
+      seen: true,
+    };
+  }
+
+  const res = await fetch(`/api/tempmail/messages/${encodeURIComponent(msgId)}`, {
+    headers: { Authorization: `Bearer ${targetAccount.token}` },
+  });
+  const detail = await safeParseJson<TempMailDetail & { error?: string }>(res);
+  if (!res.ok || !detail) {
+    throw new Error(detail?.error || 'Could not load message.');
+  }
+  return detail;
+}
+
+function deleteMessageForAccount(targetAccount: TempMailAccount, msgId: string): void {
+  if (targetAccount.provider === 'maildrop') {
+    const mailbox = targetAccount.mailbox || targetAccount.address.split('@')[0];
+    fetch(MAILDROP_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: 'mutation($mailbox: String!, $id: String!) { delete(mailbox: $mailbox, id: $id) }',
+        variables: { mailbox, id: msgId },
+      }),
+    }).catch(() => {});
+    return;
+  }
+
+  if (targetAccount.provider === 'guerrilla') {
+    fetch(
+      `${GUERRILLA_ENDPOINT}?f=del_email&email_ids[]=${encodeURIComponent(
+        msgId
+      )}&sid_token=${encodeURIComponent(targetAccount.token)}`
+    ).catch(() => {});
+    return;
+  }
+
+  fetch(`/api/tempmail/messages/${encodeURIComponent(msgId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${targetAccount.token}` },
+  }).catch(() => {});
+}
+
 export const TempMailModule: React.FC = () => {
   const { createNoteFromPayload, sendToQr, showToast } = useHub();
 
@@ -173,6 +538,7 @@ export const TempMailModule: React.FC = () => {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const [messages, setMessages] = useState<TempMailSummary[]>([]);
+  const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
@@ -206,13 +572,9 @@ export const TempMailModule: React.FC = () => {
     async (targetAccount: TempMailAccount, silent = false) => {
       if (!silent) setRefreshing(true);
       try {
-        const res = await fetch('/api/tempmail/messages', {
-          headers: { Authorization: `Bearer ${targetAccount.token}` },
-        });
-        const data = (await res.json()) as { messages?: TempMailSummary[]; error?: string };
-
-        if (res.status === 401) {
-          setErrorMsg(data.error || 'Temporary inbox expired. Generate a fresh address.');
+        const result = await listMessagesForAccount(targetAccount);
+        if (result.expired) {
+          setErrorMsg('Temporary inbox expired. Generate a fresh address.');
           setAccount(null);
           saveSession(null);
           setMessages([]);
@@ -220,17 +582,12 @@ export const TempMailModule: React.FC = () => {
           setSelectedId(null);
           return;
         }
-        if (!res.ok) {
-          if (!silent) setErrorMsg(data.error || 'Unable to check inbox right now.');
-          return;
-        }
 
-        const list = data.messages || [];
+        const list = result.messages;
         setErrorMsg(null);
         setMessages(list);
         setLastSyncedAt(Date.now());
 
-        // Notify cleanly when a brand-new message arrives after initial load
         if (initialFetchDoneRef.current) {
           const newlyArrived = list.filter((m) => !knownMessageIdsRef.current.has(m.id));
           if (newlyArrived.length > 0) {
@@ -244,8 +601,12 @@ export const TempMailModule: React.FC = () => {
         }
         list.forEach((m) => knownMessageIdsRef.current.add(m.id));
         initialFetchDoneRef.current = true;
-      } catch {
-        if (!silent) setErrorMsg('Could not reach Mail.tm inbox right now.');
+      } catch (err) {
+        if (!silent) {
+          setErrorMsg(
+            err instanceof Error ? err.message : 'Unable to check inbox right now.'
+          );
+        }
       } finally {
         if (!silent) setRefreshing(false);
       }
@@ -259,26 +620,35 @@ export const TempMailModule: React.FC = () => {
     setErrorMsg(null);
     triggerHaptic('medium');
 
+    const prefix = customPrefix.trim() || undefined;
+
     try {
-      const res = await fetch('/api/tempmail/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prefix: customPrefix.trim() || undefined }),
-      });
-      const data = (await res.json()) as Partial<TempMailAccount> & { error?: string };
-      if (!res.ok || !data.id || !data.address || !data.token) {
-        throw new Error(data.error || 'Unable to generate temporary address.');
+      let fresh: TempMailAccount | null = null;
+
+      // 1. Try Mail.tm via local/Node Express backend first
+      try {
+        fresh = await createMailTmViaBackend(prefix);
+      } catch {
+        // Backend absent (e.g. Render Static Site / GitHub Pages / mobile static shell) -> direct browser CORS fallback
       }
 
-      const fresh: TempMailAccount = {
-        id: data.id,
-        address: data.address,
-        token: data.token,
-        createdAt: data.createdAt || new Date().toISOString(),
-      };
+      // 2. Fallback: Maildrop.cc GraphQL directly from browser (Access-Control-Allow-Origin: *)
+      if (!fresh) {
+        try {
+          fresh = await createMaildropDirect(prefix);
+        } catch {
+          // Try next direct fallback
+        }
+      }
+
+      // 3. Fallback: Guerrilla Mail directly from browser (Access-Control-Allow-Origin: *)
+      if (!fresh) {
+        fresh = await createGuerrillaDirect(prefix);
+      }
 
       knownMessageIdsRef.current = new Set();
       initialFetchDoneRef.current = false;
+      setReadIds(new Set());
       setAccount(fresh);
       saveSession(fresh);
       setMessages([]);
@@ -289,7 +659,10 @@ export const TempMailModule: React.FC = () => {
       await copyAddress(fresh.address);
       void fetchInbox(fresh, true);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unable to create Temp Mail address.';
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'Unable to create Temp Mail address right now. Please check your internet connection and retry.';
       setErrorMsg(msg);
       triggerHaptic('error');
     } finally {
@@ -304,6 +677,7 @@ export const TempMailModule: React.FC = () => {
     setAccount(null);
     saveSession(null);
     setMessages([]);
+    setReadIds(new Set());
     setSelectedId(null);
     setActiveDetail(null);
     setLastSyncedAt(null);
@@ -313,10 +687,12 @@ export const TempMailModule: React.FC = () => {
 
     showToast({ title: 'Disposable inbox deleted', description: prev.address });
 
-    fetch(`/api/tempmail/account/${encodeURIComponent(prev.id)}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${prev.token}` },
-    }).catch(() => {});
+    if (prev.provider === 'mailtm') {
+      fetch(`/api/tempmail/account/${encodeURIComponent(prev.id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${prev.token}` },
+      }).catch(() => {});
+    }
   };
 
   const handleOpenMessage = async (msg: TempMailSummary) => {
@@ -327,17 +703,15 @@ export const TempMailModule: React.FC = () => {
     setErrorMsg(null);
     autoScrollToElement(readerCardRef);
 
-    // Optimistically mark seen in the inbox list
+    setReadIds((prev) => {
+      const next = new Set(prev);
+      next.add(msg.id);
+      return next;
+    });
     setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, seen: true } : m)));
 
     try {
-      const res = await fetch(`/api/tempmail/messages/${encodeURIComponent(msg.id)}`, {
-        headers: { Authorization: `Bearer ${account.token}` },
-      });
-      const detail = (await res.json()) as TempMailDetail & { error?: string };
-      if (!res.ok) {
-        throw new Error(detail.error || 'Could not load message.');
-      }
+      const detail = await fetchMessageDetailForAccount(account, msg.id);
       setActiveDetail(detail);
       setReaderMode(detail.html && detail.html.length > 0 ? 'html' : 'text');
     } catch (err) {
@@ -355,10 +729,7 @@ export const TempMailModule: React.FC = () => {
       setSelectedId(null);
       setActiveDetail(null);
     }
-    fetch(`/api/tempmail/messages/${encodeURIComponent(msgId)}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${account.token}` },
-    }).catch(() => {});
+    deleteMessageForAccount(account, msgId);
     showToast({ title: 'Message removed' });
   };
 
@@ -399,6 +770,13 @@ export const TempMailModule: React.FC = () => {
     showToast({ title: `Copied code ${code}` });
     window.setTimeout(() => setCopiedCode((curr) => (curr === code ? null : curr)), 1800);
   };
+
+  const providerName =
+    account?.provider === 'maildrop'
+      ? 'Maildrop'
+      : account?.provider === 'guerrilla'
+      ? 'Guerrilla Mail'
+      : 'Mail.tm';
 
   return (
     <div className="space-y-5">
@@ -455,7 +833,7 @@ export const TempMailModule: React.FC = () => {
                   Create a fresh disposable email in one tap
                 </div>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Powered by Mail.tm with no signup or API key. Incoming OTP codes and verification
+                  Free live inbox with no signup or API key. Incoming OTP codes and verification
                   links appear here automatically.
                 </p>
               </div>
@@ -467,8 +845,8 @@ export const TempMailModule: React.FC = () => {
                 value={customPrefix}
                 onChange={(e) => setCustomPrefix(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleGenerateAddress()}
-                placeholder="Optional custom prefix (e.g. shopping) or leave blank for random…"
-                className="flex-1 min-w-0 h-11 px-4 rounded-xl glass-input text-sm"
+                placeholder="Optional custom prefix (e.g. shopping)…"
+                className="w-full sm:flex-1 min-w-0 h-11 shrink-0 px-4 rounded-xl glass-input text-sm"
               />
               <button
                 type="button"
@@ -490,8 +868,10 @@ export const TempMailModule: React.FC = () => {
           <div className="rounded-2xl bg-white/80 border border-white p-4 sm:p-5 space-y-3.5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5">
+                <div className="text-[11px] font-medium text-slate-500 flex flex-wrap items-center gap-1.5">
                   <span>Active Temporary Address</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{providerName}</span>
                   {lastSyncedAt && (
                     <>
                       <span aria-hidden="true">·</span>
@@ -593,7 +973,7 @@ export const TempMailModule: React.FC = () => {
               <div className="divide-y divide-slate-200/70">
                 {messages.map((msg) => {
                   const isSelected = selectedId === msg.id;
-                  const isUnread = msg.seen === false;
+                  const isUnread = msg.seen === false && !readIds.has(msg.id);
                   const senderLabel = msg.from?.name || msg.from?.address || 'Unknown sender';
                   return (
                     <button
@@ -823,7 +1203,7 @@ export const TempMailModule: React.FC = () => {
       <div className="px-2 flex items-center justify-between text-[11px] text-slate-500">
         <span className="inline-flex items-center gap-1.5">
           <Mail className="w-3.5 h-3.5 text-slate-400" />
-          <span>Live disposable mailboxes via Mail.tm · No signup or API key needed</span>
+          <span>Live disposable mailboxes · Works everywhere with no signup or API key</span>
         </span>
       </div>
     </div>

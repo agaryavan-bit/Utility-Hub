@@ -1,0 +1,6 @@
+{
+  "name": "Tooly — Personal Utility Hub",
+  "description": "A bright frosted Liquid Glass personal utility hub unifying Tooly's 11 tool categories, QR Scanner & Generator, Weather, Notes, Reminders, and AnkiDroid flashcards.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

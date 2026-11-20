@@ -1,0 +1,189 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  --background: #f2f6fc;
+  --foreground: #0f172a;
+  --muted-foreground: #475569;
+  --primary: #007aff;
+  --primary-hover: #0062cc;
+  --surface-glass: rgba(255, 255, 255, 0.58);
+  --surface-glass-strong: rgba(255, 255, 255, 0.78);
+  --surface-glass-hover: rgba(255, 255, 255, 0.74);
+  --glass-border: rgba(255, 255, 255, 0.82);
+  --glass-outer-ring: rgba(15, 23, 42, 0.065);
+}
+
+html,
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  min-height: 100%;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-display {
+  font-family: var(--font-display);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Luminous Soft Pastel Liquid Mesh Canvas */
+.liquid-mesh-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: #f3f7fd;
+  background-image:
+    radial-gradient(ellipse 68% 58% at 12% 8%, rgba(169, 214, 255, 0.52), transparent 62%),
+    radial-gradient(ellipse 56% 52% at 88% 14%, rgba(212, 200, 255, 0.45), transparent 60%),
+    radial-gradient(ellipse 60% 56% at 82% 86%, rgba(173, 238, 229, 0.48), transparent 60%),
+    radial-gradient(ellipse 55% 50% at 14% 88%, rgba(255, 218, 206, 0.34), transparent 58%),
+    radial-gradient(ellipse 50% 45% at 50% 48%, rgba(255, 255, 255, 0.7), transparent 70%);
+}
+
+/* Primary Frosted Liquid Glass Surface */
+.glass-panel {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.72) 0%,
+    rgba(255, 255, 255, 0.52) 55%,
+    rgba(248, 251, 255, 0.64) 100%
+  );
+  backdrop-filter: blur(26px) saturate(185%);
+  -webkit-backdrop-filter: blur(26px) saturate(185%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow:
+    0 10px 30px -12px rgba(15, 23, 42, 0.08),
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 1px 0 0 rgba(255, 255, 255, 0.55);
+}
+
+/* Higher Opacity Frosted Glass for Modals, Drawers & Inputs */
+.glass-panel-strong {
+  background: linear-gradient(
+    155deg,
+    rgba(255, 255, 255, 0.88) 0%,
+    rgba(250, 252, 255, 0.78) 100%
+  );
+  backdrop-filter: blur(34px) saturate(200%);
+  -webkit-backdrop-filter: blur(34px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.94);
+  box-shadow:
+    0 22px 48px -16px rgba(15, 23, 42, 0.14),
+    0 2px 6px rgba(15, 23, 42, 0.04),
+    inset 0 1.5px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.03);
+}
+
+/* Signature iPhone Floating Liquid Glass Dock */
+.glass-dock {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.76) 0%,
+    rgba(248, 251, 255, 0.62) 100%
+  );
+  backdrop-filter: blur(32px) saturate(210%);
+  -webkit-backdrop-filter: blur(32px) saturate(210%);
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 18px 42px -12px rgba(15, 23, 42, 0.15),
+    0 4px 12px -2px rgba(15, 23, 42, 0.06),
+    inset 0 1.5px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 1px rgba(15, 23, 42, 0.04);
+}
+
+/* Recessed Glass Input Field */
+.glass-input {
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.035), 0 1px 0 rgba(255, 255, 255, 0.85);
+  transition: border-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-input:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(0, 122, 255, 0.55);
+  box-shadow:
+    0 0 0 3px rgba(0, 122, 255, 0.14),
+    inset 0 1px 2px rgba(15, 23, 42, 0.02);
+}
+
+/* Tactile Glass Interactive Surface */
+.glass-interactive {
+  transition:
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-interactive:hover {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.84) 0%,
+    rgba(255, 255, 255, 0.64) 100%
+  );
+  box-shadow:
+    0 14px 34px -12px rgba(15, 23, 42, 0.11),
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
+}
+
+.glass-interactive:active {
+  transform: scale(0.975);
+}
+
+/* 3D Perspective for Anki Flashcards */
+.perspective-1200 {
+  perspective: 1200px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+/* Hide scrollbars cleanly for horizontal sub-tabs */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
